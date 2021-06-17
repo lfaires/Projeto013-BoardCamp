@@ -100,6 +100,68 @@ app.post('/games', async (req,res) => {
     }
 })
 
+//Customers route
+
+app.get('/customers', async (req,res) => {
+    const { cpf } = req.query
+    const queryString = cpf ? ` WHERE name ILIKE '${cpf}%'` : ""
+
+    try {
+        const result = await connection.query('SELECT * FROM customers'+ queryString)
+        res.send(result.rows)
+    } catch (error) {
+        console.log(error)
+        res.sendStatus(500)
+    }
+})
+
+app.get('/customers/:id', async (req,res) => {
+    const { id } = req.params
+
+    try {
+        const result = await connection.query('SELECT * FROM customers WHERE id = $1',[id])
+        if(result.rows.length ===0){
+            res.sendStatus(404)
+            return
+        }
+        res.send(result.rows)
+    } catch (error) {
+        console.log(error)
+        res.sendStatus(500)
+    }
+})
+
+app.post('/customers', async (req,res) => {
+    const schema = Joi.object({
+        name: Joi.string().min(3).max(50).required(),
+        cpf: Joi.string().pattern(new RegExp('^[0-9]{11}$')).required(),
+        phone: Joi.string().pattern(new RegExp('^[0-9]{10,11}$')).required(),
+        birthday: Joi.date().min('1-1-1900').max('now').required()
+    })
+
+    const { name, phone, cpf, birthday } = req.body
+    const { error } = schema.validate({name: name, phone: phone, cpf: cpf, birthday: birthday})
+
+    const result = await connection.query('INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4)', [name, phone, cpf, birthday])
+
+})
+
+app.put('/customers/:id', (req,res) => {
+    const { id } = req.params
+    const schema = Joi.object({
+        name: Joi.string().min(3).max(50).required(),
+        cpf: Joi.string().pattern(new RegExp('^[0-9]{11}$')).required(),
+        phone: Joi.string().pattern(new RegExp('^[0-9]{10,11}$')).required(),
+        birthday: Joi.date().min('1-1-1900').max('now').required()
+    })
+
+    const { name, phone, cpf, birthday } = req.body
+    const { error } = schema.validate({name: name, phone: phone, cpf: cpf, birthday: birthday})
+
+    const result = await connection.query('UPDATE customers SET (name=$1, phone=$2, cpf=$3, birthday=$4) WHERE id = $5', [name, phone, cpf, birthday, id])
+
+});
+
 app.listen(4000, () => {
     console.log("Server running on port 4000")
 });
