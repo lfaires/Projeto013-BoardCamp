@@ -55,16 +55,22 @@ app.post('/categories', async (req,res) => {
     }
 })
 
+
 //Games route
 
 app.get('/games', async (req,res) => {
     const { name } = req.query
-    const queryString = name ? ` WHERE name ILIKE '${name}%'` : ""
+    const queryString = name ? ` WHERE games.name ILIKE '${name}%'` : ""
     
-    try {
-        const result = await connection.query('SELECT * FROM games'+ queryString)
+    try{
+        const result = await connection.query(`
+            SELECT games.*, categories.name AS categoryName
+            FROM games JOIN categories
+            ON games."categoryId" = categories.id
+            ${queryString}
+        `)
         res.send(result.rows)
-    } catch (error) {
+    } catch (error){
         console.log(error)
         res.sendStatus(500)
     }
@@ -74,7 +80,7 @@ app.post('/games', async (req,res) => {
     const schema = Joi.object({
         name: Joi.string().min(3).max(30),
         stockTotal: Joi.number().greater(0),  
-        pricePerDay: Joi.number().greater(0),
+        pricePerDay: Joi.number().greater(0),t
     });
 
     const { name, image, stockTotal, categoryId, pricePerDay } = req.body;
@@ -99,6 +105,7 @@ app.post('/games', async (req,res) => {
         res.sendStatus(500)
     }
 })
+
 
 //Customers route
 
@@ -136,17 +143,32 @@ app.post('/customers', async (req,res) => {
         name: Joi.string().min(3).max(50).required(),
         cpf: Joi.string().pattern(new RegExp('^[0-9]{11}$')).required(),
         phone: Joi.string().pattern(new RegExp('^[0-9]{10,11}$')).required(),
-        birthday: Joi.date().min('1-1-1900').max('now').required()
+        birthday: Joi.date().min('01-01-1900').max('now').required()
     })
 
     const { name, phone, cpf, birthday } = req.body
     const { error } = schema.validate({name: name, phone: phone, cpf: cpf, birthday: birthday})
+    if (error !== undefined){
+        res.sendStatus(400)
+        return
+    }
 
-    const result = await connection.query('INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4)', [name, phone, cpf, birthday])
+    try{
+        const result = await connection.query('SELECT * FROM customers WHERE cpf = $1',[cpf])
+        if(result.rows.length !==0){
+            res.sendStatus(409)
+            return
+        }
 
+        await connection.query('INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4)', [name, phone, cpf, birthday])
+
+        res.send("INSERIU!!")
+    } catch (error){
+        console.log(error)
+    }
 })
 
-app.put('/customers/:id', (req,res) => {
+/*app.put('/customers/:id', (req,res) => {
     const { id } = req.params
     const schema = Joi.object({
         name: Joi.string().min(3).max(50).required(),
@@ -160,7 +182,7 @@ app.put('/customers/:id', (req,res) => {
 
     const result = await connection.query('UPDATE customers SET (name=$1, phone=$2, cpf=$3, birthday=$4) WHERE id = $5', [name, phone, cpf, birthday, id])
 
-});
+});*/
 
 app.listen(4000, () => {
     console.log("Server running on port 4000")
