@@ -121,7 +121,7 @@ app.get('/customers', async (req,res) => {
     }
 })
 
-app.get('/customers/:id', async (req,res) => {
+app.get('/customers/=id', async (req,res) => {
     const { id } = req.params
 
     try {
@@ -167,7 +167,7 @@ app.post('/customers', async (req,res) => {
     }
 })
 
-app.put('/customers/:id', async (req,res) => {
+app.put('/customers/=id', async (req,res) => {
     const { id } = req.params
     const schema = Joi.object({
         name: Joi.string().min(3).max(50).required(),
@@ -201,13 +201,57 @@ app.put('/customers/:id', async (req,res) => {
 //Rentals route
 
 app.get('/rentals', async (req,res) => {
+    const { customerId, gameId } = req.query
+    const queryCustomer = customerId ? ` WHERE rentals."customerId" = ${customerId}` : ""
+    const queryGame = gameId ? ` WHERE rentals."gameId" = ${gameId}` : ""
 
+    try{
+        const results = await connection.query(`
+            SELECT rentals.*, 
+                customers.id AS "idCustomer", customers.name, 
+                games.id AS "idGame", games.name AS "gameName", games."categoryId",
+                categories.name AS "categoryName" 
+            FROM rentals 
+            JOIN customers
+            ON rentals."customerId" = customers.id
+            JOIN games
+            ON rentals."gameId" = games.id
+            JOIN categories
+            ON categories.id = games."categoryId"
+            ${queryCustomer}
+            ${queryGame}
+            `)
+
+        const response = results.rows.map( i => {
+            return { 
+                id: i.id,
+                customerId: i.customerId,
+                gameId: i.gameId,
+                rentDate: i.rentDate,
+                daysRented: i.daysRented,
+                returnDate: i.returnDate, 
+                originalPrice: i.originalPrice,
+                delayFee: i.delayFee,
+                customer: {id: i.idCustomer, name: i.name}, 
+                game: {id: i.idGame, name: i.gameName, categoryId: i.categoryId, categpryName: i.categoryName}
+            }
+            });
+
+        if (response.length === 0){
+            res.sendStatus(404)
+            return
+        }
+        res.send(response)
+    } catch (error) {
+        console.log(error)
+        res.sendStatus(500)
+    }
 })
 
 app.post('/rentals', async (req,res) => {
     const { customerId, gameId, daysRented } = req.body;
     const returnDate = null;
-    const rentDate = Date.now();
+    const rentDate = '18-06-2021';
     const delayFee = null;
 
     try {
@@ -218,38 +262,40 @@ app.post('/rentals', async (req,res) => {
     `,[gameId])
     
     const originalPrice = price.rows[0].pricePerDay * daysRented; 
-    
+   
     const customer = await connection.query(`
         SELECT * FROM customers
         WHERE id = $1`,
         [customerId]);
     
-    if(customer.rows.length !== 0){
+    if(customer.rows.length === 0){
         res.sendStatus(400)
         return
     }
-
+   
     const game = await connection.query(`
         SELECT * FROM games
         WHERE id = $1`,
         [gameId]);
     
-    if(game.rows.length !== 0){
+    if(game.rows.length === 0){
         res.sendStatus(400)
         return
     }
-
+    
     const result = await connection.query(`
         INSERT INTO rentals ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [customerId, gameId, rentDate, daysRented, returnDate, originalPrice, delayFee])
-
+    
+    res.sendStatus(201)
+    console.log(result.rows)
     } catch (error){
         console.log(error)
         res.sendStatus(500)
     }
 })
 
-app.post('/rentals/:id/return', async (req,res) => {
+app.post('/rentals/=id/return', async (req,res) => {
     const { id } = req.params;
 
     const rental = await connection.query(`
@@ -260,6 +306,28 @@ app.post('/rentals/:id/return', async (req,res) => {
     const returnDate = Date.now()
 
     res.send("DEU NADA")
+})
+
+app.delete('/rentals/:id', async (req,res) => {
+    const { id } = req.params;
+
+    try{
+        const checkId = await connection.query('SELECT * FROM rentals WHERE id = $1', [id])
+        if(checkId.rows.length === 0){
+            res.sendStatus(404)
+            return
+        }
+
+        const result = await connection.query('DELETE FROM rentals WHERE id = $1',[id])
+        if (result.rows[0].returnDate !== null){
+            res.sendStatus(400)
+            return
+        }
+        res.sendStatus(200)
+    } catch (error) {
+        console.log(error)
+        res.sendStatus(500)
+    }
 })
 
 app.listen(4000, () => {
