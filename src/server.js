@@ -80,7 +80,7 @@ app.post('/games', async (req,res) => {
     const schema = Joi.object({
         name: Joi.string().min(3).max(30),
         stockTotal: Joi.number().greater(0),  
-        pricePerDay: Joi.number().greater(0),t
+        pricePerDay: Joi.number().greater(0),
     });
 
     const { name, image, stockTotal, categoryId, pricePerDay } = req.body;
@@ -93,7 +93,6 @@ app.post('/games', async (req,res) => {
 
     try{
         const result = await connection.query('SELECT * FROM categories WHERE id = $1', [categoryId])
-        console.log(result)
         if(result.rows.length === 0){
             res.sendStatus(409)
             return
@@ -168,7 +167,7 @@ app.post('/customers', async (req,res) => {
     }
 })
 
-/*app.put('/customers/:id', (req,res) => {
+app.put('/customers/:id', async (req,res) => {
     const { id } = req.params
     const schema = Joi.object({
         name: Joi.string().min(3).max(50).required(),
@@ -179,10 +178,89 @@ app.post('/customers', async (req,res) => {
 
     const { name, phone, cpf, birthday } = req.body
     const { error } = schema.validate({name: name, phone: phone, cpf: cpf, birthday: birthday})
+    if (error !== undefined){
+        res.sendStatus(400)
+        return
+    }
 
-    const result = await connection.query('UPDATE customers SET (name=$1, phone=$2, cpf=$3, birthday=$4) WHERE id = $5', [name, phone, cpf, birthday, id])
+    try{
+        const result = await connection.query(`
+            UPDATE customers 
+            SET name=$1, phone=$2, cpf=$3, birthday=$4 
+            WHERE id = $5`, 
+            [name, phone, cpf, birthday, id])
+            
+        res.sendStatus(200)    
+    } catch (error) {
+        console.log(error)
+        res.sendStatus(500)
+    }
+});
 
-});*/
+
+//Rentals route
+
+app.get('/rentals', async (req,res) => {
+
+})
+
+app.post('/rentals', async (req,res) => {
+    const { customerId, gameId, daysRented } = req.body;
+    const returnDate = null;
+    const rentDate = Date.now();
+    const delayFee = null;
+
+    try {
+    const price = await connection.query(`
+        SELECT "pricePerDay" 
+        FROM games
+        WHERE id = $1
+    `,[gameId])
+    
+    const originalPrice = price.rows[0].pricePerDay * daysRented; 
+    
+    const customer = await connection.query(`
+        SELECT * FROM customers
+        WHERE id = $1`,
+        [customerId]);
+    
+    if(customer.rows.length !== 0){
+        res.sendStatus(400)
+        return
+    }
+
+    const game = await connection.query(`
+        SELECT * FROM games
+        WHERE id = $1`,
+        [gameId]);
+    
+    if(game.rows.length !== 0){
+        res.sendStatus(400)
+        return
+    }
+
+    const result = await connection.query(`
+        INSERT INTO rentals ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee") VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [customerId, gameId, rentDate, daysRented, returnDate, originalPrice, delayFee])
+
+    } catch (error){
+        console.log(error)
+        res.sendStatus(500)
+    }
+})
+
+app.post('/rentals/:id/return', async (req,res) => {
+    const { id } = req.params;
+
+    const rental = await connection.query(`
+        SELECT * FROM rentals
+        WHERE id = $1`,
+        [id])
+    
+    const returnDate = Date.now()
+
+    res.send("DEU NADA")
+})
 
 app.listen(4000, () => {
     console.log("Server running on port 4000")
